@@ -217,6 +217,10 @@ socket.on('progress', (d) => {
     document.getElementById('progress-percent').textContent = d.progress + '%';
     document.getElementById('progress-text').textContent = `[${d.current}/${d.total}] ${d.text}...`;
 });
+socket.on('merging', (d) => {
+    document.getElementById('progress-text').textContent = '正在合并音频...';
+    document.getElementById('progress-percent').textContent = '处理中';
+});
 socket.on('done', (d) => {
     document.getElementById('progress-card').classList.add('d-none');
     document.getElementById('result-card').classList.remove('d-none');

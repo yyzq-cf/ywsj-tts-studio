@@ -261,6 +261,9 @@ def run_tts(task_id, filepath, voice, rate, volume, text_input):
         if filepath and os.path.exists(filepath):
             os.remove(filepath)
 
+        task['status'] = 'merging'
+        socketio.emit('merging', {'task': task_id})
+
         task['status'] = 'done'
         task['output'] = output_path
         socketio.emit('done', {'task': task_id})
