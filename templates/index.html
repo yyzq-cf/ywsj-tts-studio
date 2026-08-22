@@ -263,7 +263,20 @@ uploadZone.addEventListener('drop', (e) => {
 let selectedVoice = 'zh-CN-YunxiNeural';
 let allVoices = [];
 
-const langNames = {
+const localeNames = {
+                'zh-CN':'普通话','zh-CN-liaoning':'东北话','zh-CN-shaanxi':'陕西话',
+                'zh-HK':'粤语','zh-TW':'台湾繁体',
+                'en-US':'美式','en-GB':'英式','en-AU':' Aussie','en-IN':'印度','en-ZA':'南非',
+                'en-NG':'尼日利亚','en-KE':'肯尼亚','en-PH':'菲律宾','en-SG':'新加坡',
+                'en-NZ':'新西兰','en-IE':'爱尔兰','en-CA':'加拿大','en-HK':'香港','en-TZ':'坦桑尼亚',
+                'es-ES':'西班牙','es-MX':'墨西哥','es-AR':'阿根廷','es-CO':'哥伦比亚','es-CL':'智利',
+                'es-US':'美国','es-PE':'秘鲁','es-VE':'委内瑞拉',
+                'pt-BR':'巴西','pt-PT':'葡萄牙',
+                'fr-FR':'法国','fr-CA':'加拿大','fr-CH':'瑞士','fr-BE':'比利时',
+                'de-DE':'德国','de-AT':'奥地利','de-CH':'瑞士',
+                'ar-EG':'埃及','ar-SA':'沙特','ar-AE':'阿联酋','ar-MA':'摩洛哥',
+            };
+            const langNames = {
                 zh:'中文',en:'英语',ja:'日语',ko:'韩语',es:'西班牙语',fr:'法语',de:'德语',
                 ru:'俄语',pt:'葡萄牙语',it:'意大利语',ar:'阿拉伯语',th:'泰语',vi:'越南语',
                 id:'印尼语',tr:'土耳其语',nl:'荷兰语',pl:'波兰语',hi:'印地语',
@@ -309,7 +322,7 @@ async function loadVoices() {
             '<div class="fw-bold small">' + v.id.replace('Neural','') + '</div>' +
             '<div class="d-flex justify-content-between align-items-center">' +
             '<small class="text-muted">' + v.gender + '</small>' +
-            '<small class="text-muted">' + (langNames[v.lang] || v.locale) + '</small>' +
+            '<small class="text-muted">' + (langNames[v.lang] || v.locale) + ' ' + (localeNames[v.locale] || '') + '</small>' +
             '</div></div></div>';
         col.querySelector('.voice-card').addEventListener('click', function(e) {
             selectedVoice = v.id;
