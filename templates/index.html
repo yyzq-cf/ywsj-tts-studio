@@ -195,10 +195,7 @@ uploadZone.addEventListener('drop', (e) => {
 let selectedVoice = 'zh-CN-YunxiNeural';
 let allVoices = [];
 
-async function loadLanguages() {
-    const r = await fetch('/api/languages');
-    const langs = await r.json();
-    const langNames = {
+const langNames = {
                 zh:'中文',en:'英语',ja:'日语',ko:'韩语',es:'西班牙语',fr:'法语',de:'德语',
                 ru:'俄语',pt:'葡萄牙语',it:'意大利语',ar:'阿拉伯语',th:'泰语',vi:'越南语',
                 id:'印尼语',tr:'土耳其语',nl:'荷兰语',pl:'波兰语',hi:'印地语',
@@ -215,6 +212,11 @@ async function loadLanguages() {
                 sv:'瑞典语',sw:'斯瓦希里语',ta:'泰米尔语',te:'泰卢固语',uk:'乌克兰语',
                 ur:'乌尔都语',uz:'乌兹别克语',zu:'祖鲁语'
             };
+// languages loaded
+
+async function loadLanguages() {
+    const r = await fetch('/api/languages');
+    const langs = await r.json();
     const sel = document.getElementById('lang-filter');
     langs.forEach(l => {
         const opt = document.createElement('option');
@@ -225,29 +227,17 @@ async function loadLanguages() {
 }
 
 async function loadVoices() {
-    const lang = document.getElementById('lang-filter').value;
-    const r = await fetch('/api/voices?lang=' + lang);
-    allVoices = await r.json();
-    const list = document.getElementById('voice-list');
-    list.innerHTML = '';
-    allVoices.forEach(v => {
-        const col = document.createElement('div');
-        col.className = 'col-md-4 col-6';
-        const isSel = v.id === selectedVoice;
-        const genderIcon = v.gender === '女声' ? 'bi-gender-female text-danger' : 'bi-gender-male text-primary';
-        col.innerHTML = `
-            <div class="card voice-card ${isSel?'selected':''}" onclick="selectVoice('${v.id}')">
-                <div class="card-body p-2">
-                    <div class="fw-bold small">${v.id.replace('Neural','')}</div>
-                    <div class="d-flex justify-content-between align-items-center">
-                        <small class="text-muted">${v.gender}</small>
-                        <small class="text-muted">${langNames[v.lang] || v.locale}</small>
-                    </div>
-                </div>
-            </div>`;
-        list.appendChild(col);
+    const r = await fetch('/api/languages');
+    const langs = await r.json();
+    const sel = document.getElementById('lang-filter');
+    langs.forEach(l => {
+        const opt = document.createElement('option');
+        opt.value = l.code;
+        opt.textContent = (langNames[l.code]||l.code) + ' (' + l.count + ')';
+        sel.appendChild(opt);
     });
 }
+
 
 function selectVoice(id) {
     selectedVoice = id;
