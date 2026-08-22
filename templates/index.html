@@ -32,6 +32,7 @@
         <div class="d-flex align-items-center gap-2">
             <span class="badge bg-light text-dark" id="voice-count">322 音色</span>
             <button class="theme-toggle" onclick="toggleTheme()" title="切换明暗"><i id="theme-icon" class="bi bi-moon-stars"></i></button>
+            <a href="/logout" class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-right"></i> 退出</a>
         </div>
     </div>
 </nav>
@@ -297,6 +298,7 @@ const localeNames = {
 
 async function loadLanguages() {
     const r = await fetch('/api/languages');
+    if (r.status === 401) { window.location.href = '/login'; return; }
     const langs = await r.json();
     const sel = document.getElementById('lang-filter');
     langs.forEach(l => {
@@ -310,6 +312,7 @@ async function loadLanguages() {
 async function loadVoices() {
     const lang = document.getElementById('lang-filter').value;
     const r = await fetch('/api/voices?lang=' + lang);
+    if (r.status === 401) { window.location.href = '/login'; return; }
     allVoices = await r.json();
     const list = document.getElementById('voice-list');
     list.innerHTML = '';
@@ -376,6 +379,7 @@ async function generate() {
     if (text) formData.append('text', text);
 
     const r = await fetch('/api/generate', { method: 'POST', body: formData });
+    if (r.status === 401) { window.location.href = '/login'; return; }
     const d = await r.json();
     currentTask = d.task;
 }

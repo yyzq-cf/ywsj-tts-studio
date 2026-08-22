@@ -19,8 +19,10 @@ import threading
 import time
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, session
+from functools import wraps
 from flask_socketio import SocketIO
 import edge_tts
+from db import init_db, verify_user, add_history, update_history, list_history, add_user, list_users, delete_user
 
 try:
     from pydub import AudioSegment
@@ -29,7 +31,10 @@ except ImportError:
     HAS_PYDUB = False
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "tts-web-secret"
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "tts-web-secret-key-change-me")
+
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 app.config["UPLOAD_FOLDER"] = "uploads"
 app.config["OUTPUT_FOLDER"] = "output"
 
@@ -43,6 +48,17 @@ def normalize_pct(val):
         val = val + '%'
     return val
 
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("logged_in"):
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "未登录"}), 401
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated
 
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
@@ -266,6 +282,12 @@ def run_tts(task_id, filepath, voice, rate, volume, text_input):
 
         task['status'] = 'done'
         task['output'] = output_path
+        # Update history
+        try:
+            duration_ms = len(combined) if HAS_PYDUB else 0
+            update_history(task_id, total, duration_ms, 'done')
+        except:
+            pass
         socketio.emit('done', {'task': task_id})
 
     except Exception as e:
@@ -276,14 +298,36 @@ def run_tts(task_id, filepath, voice, rate, volume, text_input):
         socketio.emit('error', {'task': task_id, 'error': str(e)})
 
 
-# ============ 路由 ============
+# ============ Authentication Routes ============
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if session.get("logged_in"):
+        return redirect(url_for("index"))
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        if verify_user(username, password):
+            session["logged_in"] = True
+            session["username"] = username
+            return redirect(url_for("index"))
+        error = "用户名或密码错误"
+    return render_template("login.html", error=error)
 
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+# ============ Routes ============
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html")
 
 
 @app.route("/api/voices")
+@login_required
 def api_voices():
     lang_filter = request.args.get("lang", "")
     voices = asyncio.run(edge_tts.list_voices())
@@ -302,6 +346,7 @@ def api_voices():
 
 
 @app.route("/api/languages")
+@login_required
 def api_languages():
     voices = asyncio.run(edge_tts.list_voices())
     langs = {}
@@ -314,6 +359,7 @@ def api_languages():
 
 
 @app.route("/api/generate", methods=["POST"])
+@login_required
 def api_generate():
     voice = request.form.get("voice", "zh-CN-YunxiNeural")
     rate = normalize_pct(request.form.get("rate", "+0%"))
@@ -336,6 +382,14 @@ def api_generate():
         "current": 0,
     }
 
+    # Save to history
+    filename = None
+    if "file" in request.files and request.files["file"].filename:
+        filename = request.files["file"].filename
+    elif text_input:
+        filename = "(text input)"
+    add_history(task_id, session.get("username", "unknown"), filename, voice, rate, volume)
+
     thread = threading.Thread(
         target=run_tts,
         args=(task_id, filepath, voice, rate, volume, text_input),
@@ -347,6 +401,7 @@ def api_generate():
 
 
 @app.route("/api/status/<task_id>")
+@login_required
 def api_status(task_id):
     if task_id not in tasks:
         return jsonify({"error": "任务不存在"}), 404
@@ -354,13 +409,46 @@ def api_status(task_id):
 
 
 @app.route("/api/cancel/<task_id>", methods=["POST"])
+@login_required
 def api_cancel(task_id):
     if task_id in tasks:
         tasks[task_id]["cancelled"] = True
     return jsonify({"ok": True})
 
 
+@app.route("/api/history")
+@login_required
+def api_history():
+    username = session.get("username")
+    return jsonify(list_history(username))
+
+@app.route("/api/users")
+@login_required
+def api_users():
+    return jsonify(list_users())
+
+@app.route("/api/users", methods=["POST"])
+@login_required
+def api_add_user():
+    data = request.json or {}
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+    if not username or not password:
+        return jsonify({"error": "用户名和密码不能为空"}), 400
+    if add_user(username, password):
+        return jsonify({"ok": True})
+    return jsonify({"error": "用户名已存在"}), 400
+
+@app.route("/api/users/<username>", methods=["DELETE"])
+@login_required
+def api_del_user(username):
+    if username == session.get("username"):
+        return jsonify({"error": "不能删除当前登录用户"}), 400
+    delete_user(username)
+    return jsonify({"ok": True})
+
 @app.route("/download/<task_id>")
+@login_required
 def download(task_id):
     if task_id not in tasks or tasks[task_id]["status"] != "done":
         return "文件不存在", 404
@@ -374,6 +462,7 @@ def on_connect():
 
 
 if __name__ == "__main__":
+    init_db()
     os.makedirs("uploads", exist_ok=True)
     os.makedirs("output", exist_ok=True)
     socketio.run(app, host="0.0.0.0", port=5100, debug=False, allow_unsafe_werkzeug=True)
