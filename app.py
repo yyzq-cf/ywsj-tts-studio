@@ -22,7 +22,7 @@ from flask import Flask, render_template, request, jsonify, send_file, redirect,
 from functools import wraps
 from flask_socketio import SocketIO
 import edge_tts
-from db import init_db, verify_user, add_history, update_history, list_history, add_user, list_users, delete_user
+from db import init_db, verify_user, add_history, update_history, list_history, add_user, list_users, delete_user, update_password, update_username
 
 try:
     from pydub import AudioSegment
@@ -499,6 +499,42 @@ def api_del_user(username):
         return jsonify({"error": "不能删除当前登录用户"}), 400
     delete_user(username)
     return jsonify({"ok": True})
+
+
+@app.route("/api/account/password", methods=["POST"])
+@login_required
+def api_change_password():
+    """Change current user password - requires old password"""
+    data = request.json or {}
+    old_pwd = data.get("old_password", "")
+    new_pwd = data.get("new_password", "")
+    username = session.get("username")
+    if not old_pwd or not new_pwd:
+        return jsonify({"error": "请填写旧密码和新密码"}), 400
+    if not verify_user(username, old_pwd):
+        return jsonify({"error": "旧密码不正确"}), 400
+    if len(new_pwd) < 4:
+        return jsonify({"error": "新密码至少4位"}), 400
+    update_password(username, new_pwd)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/account/username", methods=["POST"])
+@login_required
+def api_change_username():
+    """Change current username - requires password verification"""
+    data = request.json or {}
+    new_name = data.get("new_username", "").strip()
+    password = data.get("password", "")
+    old_name = session.get("username")
+    if not new_name or not password:
+        return jsonify({"error": "请填写新用户名和密码"}), 400
+    if not verify_user(old_name, password):
+        return jsonify({"error": "密码不正确"}), 400
+    if update_username(old_name, new_name):
+        session["username"] = new_name
+        return jsonify({"ok": True, "username": new_name})
+    return jsonify({"error": "用户名已存在"}), 400
 
 @app.route("/download/<task_id>")
 @login_required

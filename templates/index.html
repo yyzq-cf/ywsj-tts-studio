@@ -32,6 +32,7 @@
         <div class="d-flex align-items-center gap-2">
             <span class="badge bg-light text-dark" id="voice-count">322 音色</span>
             <button class="theme-toggle" onclick="toggleTheme()" title="切换明暗"><i id="theme-icon" class="bi bi-moon-stars"></i></button>
+            <button class="btn btn-sm btn-outline-light" onclick="showAccountSettings()"><i class="bi bi-gear"></i></button>
             <a href="/logout" class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-right"></i> 退出</a>
         </div>
     </div>
@@ -195,6 +196,52 @@
             </a>
         </div>
     </div>
+</div>
+
+<!-- Account Settings Modal -->
+<div class="modal fade" id="accountModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-gear"></i> 账号设置</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <ul class="nav nav-pills mb-3">
+          <li class="nav-item"><a class="nav-link active" data-bs-toggle="pill" href="#tab-changepwd">修改密码</a></li>
+          <li class="nav-item"><a class="nav-link" data-bs-toggle="pill" href="#tab-changeuser">修改用户名</a></li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane fade show active" id="tab-changepwd">
+            <div class="mb-3">
+              <label class="form-label">旧密码</label>
+              <input type="password" class="form-control" id="old-password" placeholder="输入当前密码">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">新密码</label>
+              <input type="password" class="form-control" id="new-password" placeholder="输入新密码（至少4位）">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">确认新密码</label>
+              <input type="password" class="form-control" id="confirm-password" placeholder="再次输入新密码">
+            </div>
+            <button class="btn btn-primary w-100" onclick="changePassword()"><i class="bi bi-key"></i> 确认修改密码</button>
+          </div>
+          <div class="tab-pane fade" id="tab-changeuser">
+            <div class="mb-3">
+              <label class="form-label">新用户名</label>
+              <input type="text" class="form-control" id="new-username" placeholder="输入新用户名">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">验证密码</label>
+              <input type="password" class="form-control" id="verify-password" placeholder="输入当前密码确认">
+            </div>
+            <button class="btn btn-primary w-100" onclick="changeUsername()"><i class="bi bi-person-check"></i> 确认修改用户名</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="/static/js/bootstrap.bundle.min.js"></script>
@@ -418,6 +465,60 @@ async function cancelTask() {
     }
     document.getElementById('progress-card').classList.add('d-none');
     document.getElementById('btn-generate').disabled = false;
+}
+
+// ============ Account Settings ============
+function showAccountSettings() {
+    new bootstrap.Modal(document.getElementById('accountModal')).show();
+}
+
+function showToast(msg, type) {
+    const t = document.createElement('div');
+    t.className = 'toast align-items-center text-white bg-' + (type || 'info');
+    t.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;';
+    t.innerHTML = '<div class="d-flex"><div class="toast-body">' + msg + '</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>';
+    document.body.appendChild(t);
+    new bootstrap.Toast(t, {delay: 3000}).show();
+    setTimeout(function() { t.remove(); }, 3500);
+}
+
+async function changePassword() {
+    const oldPwd = document.getElementById('old-password').value;
+    const newPwd = document.getElementById('new-password').value;
+    const confirmPwd = document.getElementById('confirm-password').value;
+    if (!oldPwd || !newPwd) { showToast('请填写完整', 'danger'); return; }
+    if (newPwd !== confirmPwd) { showToast('两次密码不一致', 'danger'); return; }
+    if (newPwd.length < 4) { showToast('新密码至少4位', 'danger'); return; }
+    const r = await fetch('/api/account/password', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({old_password: oldPwd, new_password: newPwd})
+    });
+    const d = await r.json();
+    if (d.ok) {
+        showToast('密码修改成功', 'success');
+        document.getElementById('old-password').value = '';
+        document.getElementById('new-password').value = '';
+        document.getElementById('confirm-password').value = '';
+    } else {
+        showToast(d.error || '修改失败', 'danger');
+    }
+}
+
+async function changeUsername() {
+    const newName = document.getElementById('new-username').value.trim();
+    const pwd = document.getElementById('verify-password').value;
+    if (!newName || !pwd) { showToast('请填写完整', 'danger'); return; }
+    const r = await fetch('/api/account/username', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({new_username: newName, password: pwd})
+    });
+    const d = await r.json();
+    if (d.ok) {
+        showToast('用户名修改成功，请重新登录', 'success');
+        setTimeout(function() { window.location.href = '/logout'; }, 1500);
+    } else {
+        showToast(d.error || '修改失败', 'danger');
+    }
 }
 
 // ============ Init ============

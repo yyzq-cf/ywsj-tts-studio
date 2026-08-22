@@ -111,6 +111,36 @@ def delete_user(username):
     conn.close()
 
 
+def update_password(username, new_password):
+    """Update user password"""
+    conn = get_db()
+    pwd_hash, salt = hash_password(new_password)
+    cur = conn.execute(
+        "UPDATE users SET password_hash = ?, salt = ? WHERE username = ?",
+        (pwd_hash, salt, username)
+    )
+    conn.commit()
+    changed = cur.rowcount > 0
+    conn.close()
+    return changed
+
+
+def update_username(old_username, new_username):
+    """Update username"""
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE users SET username = ? WHERE username = ?",
+            (new_username, old_username)
+        )
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+
 def add_history(task_id, username, filename, voice, rate, volume):
     """Add a generation history record"""
     conn = get_db()
