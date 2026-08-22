@@ -257,6 +257,10 @@ def run_tts(task_id, filepath, voice, rate, volume, text_input):
             if os.path.exists(list_file):
                 os.remove(list_file)
 
+        # Clean up uploaded file
+        if filepath and os.path.exists(filepath):
+            os.remove(filepath)
+
         task['status'] = 'done'
         task['output'] = output_path
         socketio.emit('done', {'task': task_id})
