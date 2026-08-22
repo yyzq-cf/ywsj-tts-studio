@@ -119,6 +119,70 @@
         </div>
     </div>
 
+    <!-- 使用说明 -->
+    <div class="card mb-3" id="help-card">
+        <div class="card-header d-flex justify-content-between align-items-center" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#help-content">
+            <span><i class="bi bi-question-circle"></i> 使用说明</span>
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="collapse" id="help-content">
+            <div class="card-body">
+                <h6><i class="bi bi-1-circle"></i> 基本用法</h6>
+                <ol class="small text-muted">
+                    <li>上传 SRT/VTT 字幕文件，或直接在文本框输入内容（每行一句）</li>
+                    <li>选择音色（支持 75 种语言 322 个音色，可用语言筛选）</li>
+                    <li>按需调整语速和音量</li>
+                    <li>点击「开始生成」，等待处理完成</li>
+                    <li>在线试听，确认无误后下载 MP3</li>
+                </ol>
+
+                <h6 class="mt-3"><i class="bi bi-2-circle"></i> 字幕格式说明</h6>
+                <p class="small text-muted mb-1">支持标准 SRT 和 VTT 格式：</p>
+                <pre class="small bg-light p-2 rounded"><code>1
+00:00:01,000 --> 00:00:04,000
+第一句字幕内容
+
+2
+00:00:04,000 --> 00:00:08,000
+第二句字幕内容</code></pre>
+                <p class="small text-muted">序号和时间戳会自动跳过，只把<strong>文字内容</strong>转为语音。语音按时间戳间隔排列，不会截断。</p>
+
+                <h6 class="mt-3"><i class="bi bi-3-circle"></i> 常用中文音色</h6>
+                <table class="table table-sm small">
+                    <thead><tr><th>音色ID</th><th>性别</th><th>风格</th></tr></thead>
+                    <tbody>
+                        <tr><td>zh-CN-YunxiNeural</td><td>男声</td><td>云希（自然，推荐）</td></tr>
+                        <tr><td>zh-CN-YunyangNeural</td><td>男声</td><td>云扬（新闻播报）</td></tr>
+                        <tr><td>zh-CN-XiaoxiaoNeural</td><td>女声</td><td>晓晓（自然，推荐）</td></tr>
+                        <tr><td>zh-CN-XiaoyiNeural</td><td>女声</td><td>晓伊（温柔）</td></tr>
+                        <tr><td>zh-CN-YunjianNeural</td><td>男声</td><td>云健（激情/体育）</td></tr>
+                        <tr><td>zh-CN-liaoning-XiaobeiNeural</td><td>女声</td><td>晓北（东北话）</td></tr>
+                        <tr><td>zh-CN-shaanxi-XiaoniNeural</td><td>女声</td><td>晓妮（陕西话）</td></tr>
+                    </tbody>
+                </table>
+
+                <h6 class="mt-3"><i class="bi bi-4-circle"></i> 制作 YouTube 多音轨视频</h6>
+                <p class="small text-muted mb-1">用不同音色生成多语言音频后，用 ffmpeg 合并：</p>
+                <pre class="small bg-light p-2 rounded"><code>ffmpeg -i 视频.mp4 -i 中文.mp3 -i 英语.mp3 \
+  -map 0:v -map 1:a -map 2:a \
+  -c:v copy -c:a aac \
+  -metadata:s:a:0 language=chi \
+  -metadata:s:a:1 language=eng \
+  输出.mp4</code></pre>
+                <p class="small text-muted">然后在 YouTube Studio 上传时选择多音轨。</p>
+
+                <h6 class="mt-3"><i class="bi bi-info-circle"></i> 关于本工具</h6>
+                <ul class="small text-muted">
+                    <li>语音引擎：微软 Edge TTS（免费，无需 API Key）</li>
+                    <li>支持 75 种语言，322 个音色</li>
+                    <li>语音合成在服务器端完成，不占用本地资源</li>
+                    <li>字幕模式下按时间戳对齐，保留原始节奏</li>
+                    <li>纯文本模式下每行作为一句，自动估算时长</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
     <!-- Result -->
     <div class="card d-none" id="result-card">
         <div class="card-body text-center">
