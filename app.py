@@ -145,13 +145,36 @@ def run_tts(task_id, filepath, voice, rate, volume, text_input):
         task['status'] = 'generating'
 
         if HAS_PYDUB:
-            # ============ 时间轴对齐模式 ============
-            # 策略：语音完整保留不截断，按时间戳间隔排列
-            # - 每条语音放在字幕的 start 时间
-            # - 如果语音比字幕间隔长，下一条顺延，不重叠
-            # - 字幕之间有间隔时补静音
+            import subprocess as sp
 
-            # 先收集所有语音片段
+            def fit_audio_to_duration(audio, target_ms):
+                # If audio is longer than target, speed it up with atempo (no truncation)
+                actual = len(audio)
+                if actual <= target_ms or target_ms <= 0:
+                    return audio
+                speed = actual / target_ms
+                if speed > 4.0:
+                    speed = 4.0
+                # atempo chain: 0.5~2.0 per step
+                atempos = []
+                remaining = speed
+                while remaining > 2.0:
+                    atempos.append(2.0)
+                    remaining = remaining / 2.0
+                atempos.append(round(remaining, 3))
+                atempo_str = ",".join(f"atempo={a}" for a in atempos)
+                tmp_in = f"/tmp/_atempo_in_{task_id}.mp3"
+                tmp_out = f"/tmp/_atempo_out_{task_id}.mp3"
+                audio.export(tmp_in, format='mp3')
+                sp.run(['ffmpeg', '-y', '-i', tmp_in, '-filter:a', atempo_str, tmp_out],
+                       capture_output=True)
+                result = AudioSegment.from_file(tmp_out)
+                for p in [tmp_in, tmp_out]:
+                    if os.path.exists(p):
+                        os.remove(p)
+                return result
+
+            # Generate all voice clips first
             audio_clips = []
             for i, sub in enumerate(subs):
                 if task.get('cancelled'):
@@ -164,12 +187,10 @@ def run_tts(task_id, filepath, voice, rate, volume, text_input):
                 if os.path.exists(clip_path):
                     os.remove(clip_path)
 
-                actual_dur = len(audio)
                 audio_clips.append({
                     'audio': audio,
-                    'start_ts': sub['start'],  # 字幕时间戳
+                    'start_ts': sub['start'],
                     'end_ts': sub['end'],
-                    'actual_dur': actual_dur,
                     'text': sub['text']
                 })
 
@@ -183,25 +204,21 @@ def run_tts(task_id, filepath, voice, rate, volume, text_input):
                     'text': sub['text'][:40]
                 })
 
-            # 计算总时长：考虑语音超长顺延
-            total_duration = 0
-            cursor = 0  # 当前音频推进的位置
-            placed = []  # (position, audio, duration)
+            # Place each clip strictly at subtitle start time
+            # If too long, speed up with atempo to fit (no truncation, no delay)
+            total_duration = subs[-1]['end'] + 1000
+            combined = AudioSegment.silent(duration=total_duration)
 
             for i, clip in enumerate(audio_clips):
-                # 目标位置：取字幕 start 和 cursor 的较大值（不重叠）
-                target_pos = max(clip['start_ts'], cursor)
-                placed.append((target_pos, clip['audio'], clip['actual_dur']))
-                cursor = target_pos + clip['actual_dur']
-                total_duration = max(total_duration, cursor)
+                target_pos = clip['start_ts']
+                # Max duration: until next subtitle starts
+                if i < len(audio_clips) - 1:
+                    max_dur = audio_clips[i + 1]['start_ts'] - target_pos
+                else:
+                    max_dur = clip['end_ts'] - target_pos
 
-            # 最后一条字幕的 end 也算上
-            total_duration = max(total_duration, subs[-1]['end'] + 500)
-
-            # 构建空白底轨，把各片段放到对应位置
-            combined = AudioSegment.silent(duration=total_duration)
-            for pos, audio, dur in placed:
-                combined = combined.overlay(audio, position=pos)
+                fitted = fit_audio_to_duration(clip['audio'], int(max_dur))
+                combined = combined.overlay(fitted, position=target_pos)
 
             output_path = os.path.join(app.config["OUTPUT_FOLDER"], f"{task_id}.mp3")
             combined.export(output_path, format='mp3')
