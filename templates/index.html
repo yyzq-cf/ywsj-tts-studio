@@ -227,14 +227,28 @@ async function loadLanguages() {
 }
 
 async function loadVoices() {
-    const r = await fetch('/api/languages');
-    const langs = await r.json();
-    const sel = document.getElementById('lang-filter');
-    langs.forEach(l => {
-        const opt = document.createElement('option');
-        opt.value = l.code;
-        opt.textContent = (langNames[l.code]||l.code) + ' (' + l.count + ')';
-        sel.appendChild(opt);
+    const lang = document.getElementById('lang-filter').value;
+    const r = await fetch('/api/voices?lang=' + lang);
+    allVoices = await r.json();
+    const list = document.getElementById('voice-list');
+    list.innerHTML = '';
+    allVoices.forEach(v => {
+        const col = document.createElement('div');
+        col.className = 'col-md-4 col-6';
+        const isSel = v.id === selectedVoice;
+        col.innerHTML = '<div class="card voice-card ' + (isSel?'selected':'') + '" onclick="selectVoice(\''+v.id+'\')">' +
+            '<div class="card-body p-2">' +
+            '<div class="fw-bold small">' + v.id.replace('Neural','') + '</div>' +
+            '<div class="d-flex justify-content-between align-items-center">' +
+            '<small class="text-muted">' + v.gender + '</small>' +
+            '<small class="text-muted">' + (langNames[v.lang] || v.locale) + '</small>' +
+            '</div></div></div>';
+        col.querySelector('.voice-card').addEventListener('click', function(e) {
+            selectedVoice = v.id;
+            document.querySelectorAll('.voice-card').forEach(c => c.classList.remove('selected'));
+            this.classList.add('selected');
+        });
+        list.appendChild(col);
     });
 }
 
