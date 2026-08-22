@@ -320,22 +320,50 @@ async function loadVoices() {
         const col = document.createElement('div');
         col.className = 'col-md-4 col-6';
         const isSel = v.id === selectedVoice;
-        col.innerHTML = '<div class="card voice-card ' + (isSel?'selected':'') + '" onclick="selectVoice(\''+v.id+'\')">' +
+        var playIcon = '<button class="btn btn-sm btn-link p-0 voice-play" data-voice="'+v.id+'" title="试听" style="text-decoration:none;font-size:0.9rem;"><i class="bi bi-play-circle"></i></button>';
+        col.innerHTML = '<div class="card voice-card ' + (isSel?'selected':'') + '">' +
             '<div class="card-body p-2">' +
-            '<div class="fw-bold small">' + v.id.replace('Neural','') + '</div>' +
             '<div class="d-flex justify-content-between align-items-center">' +
+            '<div class="fw-bold small">' + v.id.replace('Neural','') + '</div>' +
+            playIcon +
+            '</div>' +
+            '<div class="d-flex justify-content-between align-items-center mt-1">' +
             '<small class="text-muted">' + v.gender + '</small>' +
             '<small class="text-muted">' + (langNames[v.lang] || v.locale) + ' ' + (localeNames[v.locale] || '') + '</small>' +
             '</div></div></div>';
         col.querySelector('.voice-card').addEventListener('click', function(e) {
+            if (e.target.closest('.voice-play')) return; // Don't select when clicking play
             selectedVoice = v.id;
             document.querySelectorAll('.voice-card').forEach(c => c.classList.remove('selected'));
             this.classList.add('selected');
+        });
+        col.querySelector('.voice-play').addEventListener('click', function(e) {
+            e.stopPropagation();
+            playPreview(v.id, this);
         });
         list.appendChild(col);
     });
 }
 
+
+let previewAudio = null;
+function playPreview(voiceId, btn) {
+    if (previewAudio) { previewAudio.pause(); }
+    var icon = btn.querySelector('i');
+    // Reset all play icons
+    document.querySelectorAll('.voice-play i').forEach(function(i) { i.className = 'bi bi-play-circle'; });
+    // If already playing this one, stop
+    if (previewAudio && previewAudio.dataset.voice === voiceId) {
+        previewAudio = null;
+        return;
+    }
+    icon.className = 'bi bi-pause-circle';
+    previewAudio = new Audio('/api/preview/' + voiceId);
+    previewAudio.dataset.voice = voiceId;
+    previewAudio.play();
+    previewAudio.onended = function() { icon.className = 'bi bi-play-circle'; };
+    previewAudio.onerror = function() { icon.className = 'bi bi-play-circle'; showToast('试听失败', 'danger'); };
+}
 
 function selectVoice(id) {
     selectedVoice = id;

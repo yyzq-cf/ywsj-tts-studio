@@ -345,6 +345,59 @@ def api_voices():
     return jsonify(result)
 
 
+@app.route("/api/preview/<voice_id>")
+@login_required
+def api_preview(voice_id):
+    """Generate a short voice preview sample"""
+    # Sample text based on language
+    voice_lower = voice_id.lower()
+    if voice_lower.startswith("zh"):
+        sample = "你好，这是语音试听示例。"
+    elif voice_lower.startswith("ja"):
+        sample = "こんにちは、これは音声サンプルです。"
+    elif voice_lower.startswith("ko"):
+        sample = "안녕하세요, 음성 샘플입니다."
+    elif voice_lower.startswith("en"):
+        sample = "Hello, this is a voice sample."
+    elif voice_lower.startswith("es"):
+        sample = "Hola, esta es una muestra de voz."
+    elif voice_lower.startswith("fr"):
+        sample = "Bonjour, ceci est un échantillon vocal."
+    elif voice_lower.startswith("de"):
+        sample = "Hallo, dies ist eine Sprachprobe."
+    elif voice_lower.startswith("ru"):
+        sample = "Здравствуйте, это образец голоса."
+    elif voice_lower.startswith("ar"):
+        sample = "مرحبا، هذا عينة صوتية."
+    elif voice_lower.startswith("th"):
+        sample = "สวัสดี นี่คือตัวอย่างเสียง"
+    elif voice_lower.startswith("vi"):
+        sample = "Xin chào, đây là mẫu giọng nói."
+    elif voice_lower.startswith("it"):
+        sample = "Ciao, questo è un campione vocale."
+    elif voice_lower.startswith("pt"):
+        sample = "Olá, esta é uma amostra de voz."
+    else:
+        sample = "Hello, this is a voice sample."
+
+    # Check cache first
+    import hashlib
+    cache_key = hashlib.md5(voice_id.encode()).hexdigest()
+    cache_dir = os.path.join(app.config["OUTPUT_FOLDER"], "previews")
+    cache_path = os.path.join(cache_dir, f"{cache_key}.mp3")
+    os.makedirs(cache_dir, exist_ok=True)
+
+    if os.path.exists(cache_path):
+        return send_file(cache_path, mimetype="audio/mpeg")
+
+    # Generate preview
+    try:
+        asyncio.run(tts_one(sample, cache_path, voice_id, "+0%", "+0%"))
+        return send_file(cache_path, mimetype="audio/mpeg")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/languages")
 @login_required
 def api_languages():
