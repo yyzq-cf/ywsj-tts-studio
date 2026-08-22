@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>字幕转语音 - TTS Studio</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        :root { --brand: #6366f1; }
+        body { font-family: -apple-system, 'Segoe UI', sans-serif; transition: background 0.3s; }
+        .navbar { background: var(--brand) !important; }
+        .btn-primary { background: var(--brand); border-color: var(--brand); }
+        .btn-primary:hover { background: #5558e3; border-color: #5558e3; }
+        .upload-zone { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 30px; text-align: center; cursor: pointer; transition: all 0.2s; }
+        .upload-zone:hover { border-color: var(--brand); background: rgba(99,102,241,0.05); }
+        .upload-zone.has-file { border-color: #22c55e; background: rgba(34,197,94,0.05); }
+        .progress-bar { background: var(--brand); }
+        .voice-card { cursor: pointer; transition: all 0.15s; }
+        .voice-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .voice-card.selected { border-color: var(--brand); background: rgba(99,102,241,0.05); }
+        .theme-toggle { cursor: pointer; border: none; background: rgba(255,255,255,0.2); color: #fff; border-radius: 50%; width: 36px; height: 36px; }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-dark">
+    <div class="container-fluid">
+        <span class="navbar-brand fw-bold">
+            <i class="bi bi-mic-fill"></i> TTS Studio
+            <small class="text-light opacity-50 fs-6">字幕转语音</small>
+        </span>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-light text-dark" id="voice-count">322 音色</span>
+            <button class="theme-toggle" onclick="toggleTheme()" title="切换明暗"><i id="theme-icon" class="bi bi-moon-stars"></i></button>
+        </div>
+    </div>
+</nav>
+
+<div class="container mt-4" style="max-width: 900px;">
+    <!-- Step 1: Input -->
+    <div class="card mb-3">
+        <div class="card-header"><i class="bi bi-1-circle"></i> 输入内容</div>
+        <div class="card-body">
+            <ul class="nav nav-pills mb-3">
+                <li class="nav-item"><a class="nav-link active" data-bs-toggle="pill" href="#tab-upload">上传字幕文件</a></li>
+                <li class="nav-item"><a class="nav-link" data-bs-toggle="pill" href="#tab-text">直接输入文本</a></li>
+            </ul>
+            <div class="tab-content">
+                <div class="tab-pane fade show active" id="tab-upload">
+                    <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+                        <i class="bi bi-cloud-arrow-up fs-1 text-muted"></i>
+                        <p class="mb-1 mt-2">点击或拖拽上传字幕文件</p>
+                        <small class="text-muted">支持 SRT / VTT 格式</small>
+                        <p class="mt-2 mb-0 text-success fw-bold" id="file-name"></p>
+                    </div>
+                    <input type="file" id="file-input" accept=".srt,.vtt" hidden>
+                </div>
+                <div class="tab-pane fade" id="tab-text">
+                    <textarea class="form-control" id="text-input" rows="5" placeholder="输入要转换的文本，每行一句..."></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 2: Voice -->
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-2-circle"></i> 选择音色</span>
+            <select class="form-select form-select-sm" id="lang-filter" style="width: auto;" onchange="loadVoices()">
+                <option value="">全部语言</option>
+            </select>
+        </div>
+        <div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">
+            <div class="row g-2" id="voice-list">
+                <div class="text-center text-muted p-3">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 3: Settings -->
+    <div class="card mb-3">
+        <div class="card-header"><i class="bi bi-3-circle"></i> 参数调整</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <label class="form-label">语速: <span id="rate-label">正常</span></label>
+                    <input type="range" class="form-range" id="rate" min="-50" max="100" value="0" oninput="updateRate()">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">音量: <span id="volume-label">正常</span></label>
+                    <input type="range" class="form-range" id="volume" min="-50" max="50" value="0" oninput="updateVolume()">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generate Button -->
+    <div class="text-center mb-4">
+        <button class="btn btn-primary btn-lg px-5" id="btn-generate" onclick="generate()">
+            <i class="bi bi-play-circle-fill"></i> 开始生成
+        </button>
+    </div>
+
+    <!-- Progress -->
+    <div class="card d-none" id="progress-card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between mb-2">
+                <span id="progress-text">准备中...</span>
+                <span id="progress-percent">0%</span>
+            </div>
+            <div class="progress" style="height: 8px;">
+                <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+            </div>
+            <div class="mt-2 text-center">
+                <button class="btn btn-sm btn-outline-danger d-none" id="btn-cancel" onclick="cancelTask()">
+                    <i class="bi bi-x-circle"></i> 取消
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Result -->
+    <div class="card d-none" id="result-card">
+        <div class="card-body text-center">
+            <i class="bi bi-check-circle-fill text-success fs-1"></i>
+            <h5 class="mt-2">生成完成!</h5>
+            <audio controls class="w-100 mt-2" id="audio-player"></audio>
+            <a class="btn btn-success mt-3" id="download-btn" href="#">
+                <i class="bi bi-download"></i> 下载 MP3
+            </a>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/socket.io@4.7.5/client-dist/socket.io.min.js"></script>
+<script>
+// ============ Theme ============
+function toggleTheme() {
+    const html = document.documentElement;
+    const next = html.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-bs-theme', next);
+    document.getElementById('theme-icon').className = next === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
+    localStorage.setItem('tts-theme', next);
+}
+const savedTheme = localStorage.getItem('tts-theme');
+if (savedTheme) { document.documentElement.setAttribute('data-bs-theme', savedTheme); document.getElementById('theme-icon').className = savedTheme === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars'; }
+
+// ============ WebSocket ============
+const socket = io();
+socket.on('progress', (d) => {
+    document.getElementById('progress-bar').style.width = d.progress + '%';
+    document.getElementById('progress-percent').textContent = d.progress + '%';
+    document.getElementById('progress-text').textContent = `[${d.current}/${d.total}] ${d.text}...`;
+});
+socket.on('done', (d) => {
+    document.getElementById('progress-card').classList.add('d-none');
+    document.getElementById('result-card').classList.remove('d-none');
+    document.getElementById('audio-player').src = '/download/' + d.task;
+    document.getElementById('download-btn').href = '/download/' + d.task;
+});
+socket.on('error', (d) => {
+    alert('生成失败: ' + d.error);
+    document.getElementById('progress-card').classList.add('d-none');
+    document.getElementById('btn-generate').disabled = false;
+});
+
+// ============ File Upload ============
+const uploadZone = document.getElementById('upload-zone');
+const fileInput = document.getElementById('file-input');
+let selectedFile = null;
+
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files[0]) {
+        selectedFile = e.target.files[0];
+        uploadZone.classList.add('has-file');
+        document.getElementById('file-name').textContent = '✅ ' + selectedFile.name;
+    }
+});
+
+// Drag & drop
+uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.style.borderColor = '#6366f1'; });
+uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor = ''; });
+uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files[0]) {
+        selectedFile = e.dataTransfer.files[0];
+        fileInput.files = e.dataTransfer.files;
+        uploadZone.classList.add('has-file');
+        document.getElementById('file-name').textContent = '✅ ' + selectedFile.name;
+    }
+});
+
+// ============ Voices ============
+let selectedVoice = 'zh-CN-YunxiNeural';
+let allVoices = [];
+
+async function loadLanguages() {
+    const r = await fetch('/api/languages');
+    const langs = await r.json();
+    const langNames = {zh:'中文',en:'英语',ja:'日语',ko:'韩语',es:'西班牙语',fr:'法语',de:'德语',ru:'俄语',pt:'葡萄牙语',it:'意大利语',ar:'阿拉伯语',th:'泰语',vi:'越南语',id:'印尼语',tr:'土耳其语',nl:'荷兰语',pl:'波兰语',hi:'印地语'};
+    const sel = document.getElementById('lang-filter');
+    langs.forEach(l => {
+        const opt = document.createElement('option');
+        opt.value = l.code;
+        opt.textContent = (langNames[l.code]||l.code) + ' (' + l.count + ')';
+        sel.appendChild(opt);
+    });
+}
+
+async function loadVoices() {
+    const lang = document.getElementById('lang-filter').value;
+    const r = await fetch('/api/voices?lang=' + lang);
+    allVoices = await r.json();
+    const list = document.getElementById('voice-list');
+    list.innerHTML = '';
+    allVoices.forEach(v => {
+        const col = document.createElement('div');
+        col.className = 'col-md-4 col-6';
+        const isSel = v.id === selectedVoice;
+        const genderIcon = v.gender === '女声' ? 'bi-gender-female text-danger' : 'bi-gender-male text-primary';
+        col.innerHTML = `
+            <div class="card voice-card ${isSel?'selected':''}" onclick="selectVoice('${v.id}')">
+                <div class="card-body p-2">
+                    <div class="fw-bold small">${v.id.replace('Neural','')}</div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">${v.gender}</small>
+                        <small class="text-muted">${v.locale}</small>
+                    </div>
+                </div>
+            </div>`;
+        list.appendChild(col);
+    });
+}
+
+function selectVoice(id) {
+    selectedVoice = id;
+    document.querySelectorAll('.voice-card').forEach(c => c.classList.remove('selected'));
+    event.currentTarget.classList.add('selected');
+}
+
+// ============ Sliders ============
+function updateRate() {
+    const v = document.getElementById('rate').value;
+    document.getElementById('rate-label').textContent = (v > 0 ? '+' : '') + v + '%';
+}
+function updateVolume() {
+    const v = document.getElementById('volume').value;
+    document.getElementById('volume-label').textContent = (v > 0 ? '+' : '') + v + '%';
+}
+
+// ============ Generate ============
+let currentTask = null;
+
+async function generate() {
+    const text = document.getElementById('text-input').value.trim();
+    if (!selectedFile && !text) {
+        alert('请上传字幕文件或输入文本');
+        return;
+    }
+
+    document.getElementById('btn-generate').disabled = true;
+    document.getElementById('progress-card').classList.remove('d-none');
+    document.getElementById('result-card').classList.add('d-none');
+    document.getElementById('btn-cancel').classList.remove('d-none');
+    document.getElementById('progress-bar').style.width = '0%';
+    document.getElementById('progress-percent').textContent = '0%';
+    document.getElementById('progress-text').textContent = '准备中...';
+
+    const formData = new FormData();
+    formData.append('voice', selectedVoice);
+    formData.append('rate', (parseInt(document.getElementById('rate').value) >= 0 ? '+' : '') + document.getElementById('rate').value + '%');
+    formData.append('volume', (parseInt(document.getElementById('volume').value) >= 0 ? '+' : '') + document.getElementById('volume').value + '%');
+    if (selectedFile) formData.append('file', selectedFile);
+    if (text) formData.append('text', text);
+
+    const r = await fetch('/api/generate', { method: 'POST', body: formData });
+    const d = await r.json();
+    currentTask = d.task;
+}
+
+async function cancelTask() {
+    if (currentTask) {
+        await fetch('/api/cancel/' + currentTask, { method: 'POST' });
+    }
+    document.getElementById('progress-card').classList.add('d-none');
+    document.getElementById('btn-generate').disabled = false;
+}
+
+// ============ Init ============
+loadLanguages().then(() => loadVoices());
+</script>
+</body>
+</html>
