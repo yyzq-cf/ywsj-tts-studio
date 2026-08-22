@@ -65,6 +65,43 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 # 任务状态
 tasks = {}
 
+# Brute force protection
+login_attempts = {}  # {ip: {count, locked_until, first_attempt}}
+MAX_LOGIN_ATTEMPTS = 5
+LOCK_TIME_SECONDS = 300  # 5 minutes lock
+
+def check_login_rate_limit(ip):
+    import time as _time
+    now = _time.time()
+    if ip not in login_attempts:
+        return True, 0
+    record = login_attempts[ip]
+    # Check if still locked
+    if record.get('locked_until', 0) > now:
+        remaining = int(record['locked_until'] - now)
+        return False, remaining
+    # Reset if lock expired
+    if record.get('locked_until', 0) > 0 and record['locked_until'] <= now:
+        del login_attempts[ip]
+        return True, 0
+    return True, 0
+
+def record_failed_login(ip):
+    import time as _time
+    now = _time.time()
+    if ip not in login_attempts:
+        login_attempts[ip] = {'count': 0, 'locked_until': 0, 'first_attempt': now}
+    login_attempts[ip]['count'] += 1
+    if login_attempts[ip]['count'] >= MAX_LOGIN_ATTEMPTS:
+        login_attempts[ip]['locked_until'] = now + LOCK_TIME_SECONDS
+        return True, LOCK_TIME_SECONDS
+    remaining = MAX_LOGIN_ATTEMPTS - login_attempts[ip]['count']
+    return False, remaining
+
+def clear_login_attempts(ip):
+    if ip in login_attempts:
+        del login_attempts[ip]
+
 
 # ============ 字幕解析 ============
 
@@ -305,13 +342,25 @@ def login():
         return redirect(url_for("index"))
     error = None
     if request.method == "POST":
+        ip = request.remote_addr or "unknown"
+        # Check rate limit
+        allowed, wait_seconds = check_login_rate_limit(ip)
+        if not allowed:
+            error = f"登录失败次数过多，请 {wait_seconds} 秒后再试"
+            return render_template("login.html", error=error), 429
         username = request.form.get("username", "")
         password = request.form.get("password", "")
         if verify_user(username, password):
+            clear_login_attempts(ip)
             session["logged_in"] = True
             session["username"] = username
             return redirect(url_for("index"))
-        error = "用户名或密码错误"
+        # Record failed attempt
+        is_locked, info = record_failed_login(ip)
+        if is_locked:
+            error = f"密码错误次数过多，账号已被锁定 {info} 秒"
+        else:
+            error = f"用户名或密码错误（剩余 {info} 次尝试机会）"
     return render_template("login.html", error=error)
 
 @app.route("/logout")
