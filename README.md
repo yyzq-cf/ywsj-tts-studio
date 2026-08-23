@@ -12,7 +12,7 @@
 - 🔐 **用户认证** — 登录保护，防暴力破解（5次失败锁定5分钟）
 - 📋 **生成历史** — SQLite 数据库记录每次生成
 - 🌗 **明暗主题** — 默认亮色，一键切换暗色
-- 🐳 **Docker 部署** — 一键启动
+- 🐳 **Docker 部署** — 一键启动，支持 AMD64 + ARM64 双架构
 
 ## 🚀 快速开始
 
@@ -32,10 +32,34 @@ docker run -d --name tts-studio --restart unless-stopped \
   -v $(pwd)/output:/app/output \
   ywsj-tts-studio
 
+# 或者使用 Docker Compose 一键启动
+docker-compose up -d
+
 # 访问
 # http://你的IP:5100
 # 默认账号: admin / admin123
 ```
+
+## 🐳 Docker 镜像
+
+镜像已发布至 Docker Hub，支持 **AMD64 (x86_64)** 和 **ARM64** 双平台架构：
+
+```
+ywsj/tts-studio:latest
+```
+
+| 平台 | 架构 | 适用场景 |
+|:-----|:-----|:--------|
+| linux/amd64 | x86_64 | VPS、PC服务器、Intel/AMD |
+| linux/arm64 | ARM64 | 树莓派、Mac M系列、ARM 云服务器 |
+
+直接拉取即可，Docker 会自动匹配当前平台架构：
+
+```bash
+docker pull ywsj/tts-studio:latest
+```
+
+> 💡 多架构镜像由 GitHub Actions 自动构建，代码推送到 master 后自动触发
 
 ## 📱 使用流程
 
@@ -94,7 +118,7 @@ ffmpeg -i video.mp4 -i chinese.mp3 -i english.mp3 \
 - **数据库**: SQLite（用户管理 + 生成历史）
 - **前端**: Bootstrap 5 + Socket.IO + 原生 JS
 - **语音引擎**: 微软 Edge TTS（免费，无需 API Key）
-- **容器**: Docker + ffmpeg
+- **容器**: Docker + ffmpeg（AMD64 + ARM64 双架构）
 
 ## 📜 License
 
