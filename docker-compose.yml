@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   tts-studio:
     image: ywsj/tts-studio:latest
@@ -7,7 +5,9 @@ services:
     restart: unless-stopped
     ports:
       - "5100:5100"
-    env_file:
-      - .env
+    environment:
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - SECRET_KEY=${SECRET_KEY:-tts-web-secret-key-change-me}
     volumes:
       - ./output:/app/output
