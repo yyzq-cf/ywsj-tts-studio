@@ -16,7 +16,7 @@
 
 
 ## web界面
-![](001.png)
+![](https://raw.githubusercontent.com/yyzq-cf/ywsj-tts-studio/refs/heads/master/001.png)
 
 ## 🚀 快速开始
 
