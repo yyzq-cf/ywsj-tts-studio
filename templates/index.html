@@ -108,11 +108,11 @@
     <div class="card d-none" id="progress-card">
         <div class="card-body">
             <div class="d-flex justify-content-between mb-2">
-                <span id="progress-text">准备中...</span>
+                <span id="progress-text"><i class="bi bi-arrow-repeat"></i> 准备中...</span>
                 <span id="progress-percent">0%</span>
             </div>
             <div class="progress" style="height: 8px;">
-                <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+                <div class="progress-bar" id="progress-bar" style="width: 0%; transition: width 0.3s ease;"></div>
             </div>
             <div class="mt-2 text-center">
                 <button class="btn btn-sm btn-outline-danger d-none" id="btn-cancel" onclick="cancelTask()">
@@ -279,20 +279,48 @@ if (savedTheme) { document.documentElement.setAttribute('data-bs-theme', savedTh
 
 // ============ WebSocket ============
 const socket = io();
+
+// Phase icons & labels
+const phaseConfig = {
+    generating: { icon: 'bi-mic-fill', label: '语音生成中', barClass: '' },
+    merging:    { icon: 'bi-layer-back', label: '音频合并中', barClass: 'progress-bar-striped progress-bar-animated' },
+    exporting:  { icon: 'bi-file-earmark-music', label: '导出MP3中', barClass: 'progress-bar-striped progress-bar-animated' },
+    finishing:  { icon: 'bi-check-circle-fill', label: '即将完成', barClass: 'bg-success' }
+};
+
+function updatePhaseUI(phase, extra) {
+    const cfg = phaseConfig[phase] || phaseConfig.generating;
+    const bar = document.getElementById('progress-bar');
+    bar.className = 'progress-bar ' + cfg.barClass;
+    let textHtml = '<i class="bi ' + cfg.icon + '"></i> ' + cfg.label;
+    if (extra) textHtml += ' ' + extra;
+    document.getElementById('progress-text').innerHTML = textHtml;
+}
+
 socket.on('progress', (d) => {
     document.getElementById('progress-bar').style.width = d.progress + '%';
     document.getElementById('progress-percent').textContent = d.progress + '%';
-    document.getElementById('progress-text').textContent = `[${d.current}/${d.total}] ${d.text}...`;
-});
-socket.on('merging', (d) => {
-    document.getElementById('progress-text').textContent = '正在合并音频...';
-    document.getElementById('progress-percent').textContent = '处理中';
+    const phase = d.phase || 'generating';
+    let extra = '';
+    if (phase === 'generating' && d.current && d.total) {
+        extra = '[' + d.current + '/' + d.total + ']';
+        if (d.text) extra += ' ' + d.text + '...';
+    } else if (phase === 'merging' && d.current && d.total) {
+        extra = '[' + d.current + '/' + d.total + ']';
+    }
+    updatePhaseUI(phase, extra);
 });
 socket.on('done', (d) => {
-    document.getElementById('progress-card').classList.add('d-none');
-    document.getElementById('result-card').classList.remove('d-none');
-    document.getElementById('audio-player').src = '/download/' + d.task;
-    document.getElementById('download-btn').href = '/download/' + d.task;
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('progress-bar').className = 'progress-bar bg-success';
+    document.getElementById('progress-percent').textContent = '100%';
+    document.getElementById('progress-text').innerHTML = '<i class="bi bi-check-circle-fill text-success"></i> 生成完成！';
+    setTimeout(() => {
+        document.getElementById('progress-card').classList.add('d-none');
+        document.getElementById('result-card').classList.remove('d-none');
+        document.getElementById('audio-player').src = '/download/' + d.task;
+        document.getElementById('download-btn').href = '/download/' + d.task;
+    }, 500);
 });
 socket.on('error', (d) => {
     alert('生成失败: ' + d.error);
@@ -462,8 +490,9 @@ async function generate() {
     document.getElementById('result-card').classList.add('d-none');
     document.getElementById('btn-cancel').classList.remove('d-none');
     document.getElementById('progress-bar').style.width = '0%';
+    document.getElementById('progress-bar').className = 'progress-bar';
     document.getElementById('progress-percent').textContent = '0%';
-    document.getElementById('progress-text').textContent = '准备中...';
+    document.getElementById('progress-text').innerHTML = '<i class="bi bi-hourglass-split"></i> 准备中...';
 
     const formData = new FormData();
     formData.append('voice', selectedVoice);

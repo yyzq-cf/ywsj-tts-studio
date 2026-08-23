@@ -227,7 +227,7 @@ def run_tts(task_id, filepath, voice, rate, volume, text_input):
                         os.remove(p)
                 return result
 
-            # Generate all voice clips first
+            # Phase 1: Generate all voice clips (0% → 80%)
             audio_clips = []
             for i, sub in enumerate(subs):
                 if task.get('cancelled'):
@@ -247,20 +247,22 @@ def run_tts(task_id, filepath, voice, rate, volume, text_input):
                     'text': sub['text']
                 })
 
-                task['progress'] = int((i + 1) / total * 100)
+                # TTS generation = 0~80%
+                task['progress'] = int((i + 1) / total * 80)
                 task['current'] = i + 1
                 socketio.emit('progress', {
                     'task': task_id,
                     'progress': task['progress'],
                     'current': i + 1,
                     'total': total,
-                    'text': sub['text'][:40]
+                    'text': sub['text'][:40],
+                    'phase': 'generating'
                 })
 
-            # Place each clip strictly at subtitle start time
-            # If too long, speed up with atempo to fit (no truncation, no delay)
+            # Phase 2: Merge clips onto timeline (80% → 95%)
             total_duration = subs[-1]['end'] + 1000
             combined = AudioSegment.silent(duration=total_duration)
+            merge_count = len(audio_clips)
 
             for i, clip in enumerate(audio_clips):
                 target_pos = clip['start_ts']
@@ -273,6 +275,23 @@ def run_tts(task_id, filepath, voice, rate, volume, text_input):
                 fitted = fit_audio_to_duration(clip['audio'], int(max_dur))
                 combined = combined.overlay(fitted, position=target_pos)
 
+                # Merge phase = 80~95%
+                task['progress'] = 80 + int((i + 1) / merge_count * 15)
+                socketio.emit('progress', {
+                    'task': task_id,
+                    'progress': task['progress'],
+                    'current': i + 1,
+                    'total': merge_count,
+                    'phase': 'merging'
+                })
+
+            # Phase 3: Export to MP3 (95% → 100%)
+            task['status'] = 'exporting'
+            socketio.emit('progress', {
+                'task': task_id,
+                'progress': 95,
+                'phase': 'exporting'
+            })
             output_path = os.path.join(app.config["OUTPUT_FOLDER"], f"{task_id}.mp3")
             combined.export(output_path, format='mp3')
 
@@ -288,16 +307,25 @@ def run_tts(task_id, filepath, voice, rate, volume, text_input):
                 asyncio.run(tts_one(sub['text'], clip_path, voice, rate, volume))
                 clips.append(clip_path)
 
-                task['progress'] = int((i + 1) / total * 100)
+                # TTS generation = 0~80%
+                task['progress'] = int((i + 1) / total * 80)
                 task['current'] = i + 1
                 socketio.emit('progress', {
                     'task': task_id,
                     'progress': task['progress'],
                     'current': i + 1,
                     'total': total,
-                    'text': sub['text'][:40]
+                    'text': sub['text'][:40],
+                    'phase': 'generating'
                 })
 
+            # Merge phase = 80~95%
+            task['status'] = 'merging'
+            socketio.emit('progress', {
+                'task': task_id,
+                'progress': 90,
+                'phase': 'merging'
+            })
             output_path = os.path.join(app.config["OUTPUT_FOLDER"], f"{task_id}.mp3")
             list_file = f"/tmp/tts_{task_id}_list.txt"
             with open(list_file, 'w') as f:
@@ -310,12 +338,22 @@ def run_tts(task_id, filepath, voice, rate, volume, text_input):
             if os.path.exists(list_file):
                 os.remove(list_file)
 
+            # Export phase = 95~100%
+            socketio.emit('progress', {
+                'task': task_id,
+                'progress': 95,
+                'phase': 'exporting'
+            })
+
         # Clean up uploaded file
         if filepath and os.path.exists(filepath):
             os.remove(filepath)
 
-        task['status'] = 'merging'
-        socketio.emit('merging', {'task': task_id})
+        socketio.emit('progress', {
+            'task': task_id,
+            'progress': 100,
+            'phase': 'finishing'
+        })
 
         task['status'] = 'done'
         task['output'] = output_path
