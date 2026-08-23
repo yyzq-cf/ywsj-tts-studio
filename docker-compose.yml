@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  tts-studio:
+    image: ywsj/tts-studio:latest
+    container_name: tts-studio
+    restart: unless-stopped
+    ports:
+      - "5100:5100"
+    env_file:
+      - .env
+    volumes:
+      - ./output:/app/output
