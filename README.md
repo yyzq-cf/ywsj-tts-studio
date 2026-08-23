@@ -16,28 +16,44 @@
 
 ## 🚀 快速开始
 
+### 方式一：Docker Compose（推荐）
+
 ```bash
 # 克隆
 git clone https://github.com/yyzq-cf/ywsj-tts-studio.git
 cd ywsj-tts-studio
 
-# 配置环境变量（默认 admin/admin123）
-cp .env.example .env
-
-# 构建并启动
-docker build -t ywsj-tts-studio .
-docker run -d --name tts-studio --restart unless-stopped \
-  -p 5100:5100 \
-  --env-file .env \
-  -v $(pwd)/output:/app/output \
-  ywsj-tts-studio
-
-# 或者使用 Docker Compose 一键启动
+# 直接启动（零配置，内置默认值 admin/admin123）
 docker-compose up -d
 
 # 访问
 # http://你的IP:5100
 # 默认账号: admin / admin123
+```
+
+如需修改密码，三种方式任选：
+
+```bash
+# 方式1: 用 .env 文件覆盖
+cp .env.example .env
+# 编辑 .env 修改密码
+docker-compose up -d
+
+# 方式2: 命令行环境变量覆盖
+ADMIN_PASSWORD=*** docker-compose up -d
+
+# 方式3: 启动后在 Web 界面 ⚙️ 设置中修改
+```
+
+### 方式二：Docker Run
+
+```bash
+docker run -d --name tts-studio --restart unless-stopped \
+  -p 5100:5100 \
+  -e ADMIN_USERNAME=admin \
+  -e ADMIN_PASSWORD=*** \
+  -v $(pwd)/output:/app/output \
+  ywsj/tts-studio:latest
 ```
 
 ## 🐳 Docker 镜像
