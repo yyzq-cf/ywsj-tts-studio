@@ -156,9 +156,109 @@ def parse_vtt(content):
 
 # ============ 语音生成 ============
 
-async def tts_one(text, path, voice, rate, volume):
-    communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume)
-    await communicate.save(path)
+async def tts_one(text, path, voice, rate, volume, max_retries=3, timeout=60):
+    """Generate TTS with timeout and retry on failure."""
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+            communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume)
+            await asyncio.wait_for(communicate.save(path), timeout=timeout)
+            if os.path.exists(path) and os.path.getsize(path) > 100:
+                return
+            raise Exception("TTS输出为空")
+        except Exception as e:
+            last_error = e
+            if os.path.exists(path):
+                os.remove(path)
+            if attempt < max_retries - 1:
+                await asyncio.sleep(2 * (attempt + 1))
+    raise Exception(f"TTS生成失败({max_retries}次重试后): {last_error}")
+
+
+async def _generate_clips_concurrent(subs, task_id, voice, rate, volume, task):
+    """Concurrent TTS generation with progress reporting. Returns AudioSegment clips."""
+    total = len(subs)
+    audio_clips = [None] * total
+    completed = [0]
+    semaphore = asyncio.Semaphore(5)
+
+    async def gen_one(i, sub):
+        async with semaphore:
+            if task.get('cancelled'):
+                return
+            clip_path = f"/tmp/tts_{task_id}_{i}.mp3"
+            await tts_one(sub['text'], clip_path, voice, rate, volume)
+            audio = await asyncio.to_thread(AudioSegment.from_file, clip_path)
+            if os.path.exists(clip_path):
+                os.remove(clip_path)
+            audio_clips[i] = {
+                'audio': audio,
+                'start_ts': sub['start'],
+                'end_ts': sub['end'],
+                'text': sub['text']
+            }
+            completed[0] += 1
+            task['progress'] = int(completed[0] / total * 80)
+            task['current'] = completed[0]
+            socketio.emit('progress', {
+                'task': task_id,
+                'progress': task['progress'],
+                'current': completed[0],
+                'total': total,
+                'text': sub['text'][:40],
+                'phase': 'generating'
+            })
+
+    await asyncio.gather(*[gen_one(i, s) for i, s in enumerate(subs)])
+    return [c for c in audio_clips if c is not None]
+
+
+async def _generate_clip_files_concurrent(subs, task_id, voice, rate, volume, task):
+    """Concurrent TTS generation - returns file paths (no pydub)."""
+    total = len(subs)
+    clip_paths = [None] * total
+    completed = [0]
+    semaphore = asyncio.Semaphore(5)
+
+    async def gen_one(i, sub):
+        async with semaphore:
+            if task.get('cancelled'):
+                return
+            clip_path = f"/tmp/tts_{task_id}_{i}.mp3"
+            await tts_one(sub['text'], clip_path, voice, rate, volume)
+            clip_paths[i] = clip_path
+            completed[0] += 1
+            task['progress'] = int(completed[0] / total * 80)
+            task['current'] = completed[0]
+            socketio.emit('progress', {
+                'task': task_id,
+                'progress': task['progress'],
+                'current': completed[0],
+                'total': total,
+                'text': sub['text'][:40],
+                'phase': 'generating'
+            })
+
+    await asyncio.gather(*[gen_one(i, s) for i, s in enumerate(subs)])
+    return [p for p in clip_paths if p is not None]
+
+
+def _heartbeat(task_id, task):
+    """Background heartbeat - emits progress every 5s so frontend knows we're alive."""
+    while True:
+        time.sleep(5)
+        status = task.get('status')
+        if status in ('done', 'error', 'cancelled'):
+            break
+        socketio.emit('heartbeat', {
+            'task': task_id,
+            'progress': task.get('progress', 0),
+            'status': status,
+            'current': task.get('current', 0),
+            'total': task.get('total', 0),
+        })
 
 
 def run_tts(task_id, filepath, voice, rate, volume, text_input):
@@ -197,6 +297,10 @@ def run_tts(task_id, filepath, voice, rate, volume, text_input):
         task['total'] = total
         task['status'] = 'generating'
 
+        # Start heartbeat so frontend knows we're alive during long operations
+        hb_thread = threading.Thread(target=_heartbeat, args=(task_id, task), daemon=True)
+        hb_thread.start()
+
         if HAS_PYDUB:
             import subprocess as sp
 
@@ -227,39 +331,20 @@ def run_tts(task_id, filepath, voice, rate, volume, text_input):
                         os.remove(p)
                 return result
 
-            # Phase 1: Generate all voice clips (0% → 80%)
-            audio_clips = []
-            for i, sub in enumerate(subs):
-                if task.get('cancelled'):
-                    task['status'] = 'cancelled'
-                    return
+            # Phase 1: Generate all voice clips concurrently (0% → 80%)
+            if task.get('cancelled'):
+                task['status'] = 'cancelled'
+                return
 
-                clip_path = f"/tmp/tts_{task_id}_{i}.mp3"
-                asyncio.run(tts_one(sub['text'], clip_path, voice, rate, volume))
-                audio = AudioSegment.from_file(clip_path)
-                if os.path.exists(clip_path):
-                    os.remove(clip_path)
+            audio_clips = asyncio.run(_generate_clips_concurrent(
+                subs, task_id, voice, rate, volume, task))
 
-                audio_clips.append({
-                    'audio': audio,
-                    'start_ts': sub['start'],
-                    'end_ts': sub['end'],
-                    'text': sub['text']
-                })
-
-                # TTS generation = 0~80%
-                task['progress'] = int((i + 1) / total * 80)
-                task['current'] = i + 1
-                socketio.emit('progress', {
-                    'task': task_id,
-                    'progress': task['progress'],
-                    'current': i + 1,
-                    'total': total,
-                    'text': sub['text'][:40],
-                    'phase': 'generating'
-                })
+            if task.get('cancelled'):
+                task['status'] = 'cancelled'
+                return
 
             # Phase 2: Merge clips onto timeline (80% → 95%)
+            task['status'] = 'merging'
             total_duration = subs[-1]['end'] + 1000
             combined = AudioSegment.silent(duration=total_duration)
             merge_count = len(audio_clips)
@@ -297,27 +382,16 @@ def run_tts(task_id, filepath, voice, rate, volume, text_input):
 
         else:
             # ============ 无 pydub：简单拼接 ============
-            clips = []
-            for i, sub in enumerate(subs):
-                if task.get('cancelled'):
-                    task['status'] = 'cancelled'
-                    return
+            if task.get('cancelled'):
+                task['status'] = 'cancelled'
+                return
 
-                clip_path = f"/tmp/tts_{task_id}_{i}.mp3"
-                asyncio.run(tts_one(sub['text'], clip_path, voice, rate, volume))
-                clips.append(clip_path)
+            clips = asyncio.run(_generate_clip_files_concurrent(
+                subs, task_id, voice, rate, volume, task))
 
-                # TTS generation = 0~80%
-                task['progress'] = int((i + 1) / total * 80)
-                task['current'] = i + 1
-                socketio.emit('progress', {
-                    'task': task_id,
-                    'progress': task['progress'],
-                    'current': i + 1,
-                    'total': total,
-                    'text': sub['text'][:40],
-                    'phase': 'generating'
-                })
+            if task.get('cancelled'):
+                task['status'] = 'cancelled'
+                return
 
             # Merge phase = 80~95%
             task['status'] = 'merging'

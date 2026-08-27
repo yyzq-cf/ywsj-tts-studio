@@ -298,6 +298,7 @@ function updatePhaseUI(phase, extra) {
 }
 
 socket.on('progress', (d) => {
+    lastProgressTime = Date.now();
     document.getElementById('progress-bar').style.width = d.progress + '%';
     document.getElementById('progress-percent').textContent = d.progress + '%';
     const phase = d.phase || 'generating';
@@ -310,7 +311,12 @@ socket.on('progress', (d) => {
     }
     updatePhaseUI(phase, extra);
 });
+socket.on('heartbeat', (d) => {
+    lastProgressTime = Date.now();
+});
 socket.on('done', (d) => {
+    clearInterval(watchdogTimer);
+    watchdogTimer = null;
     document.getElementById('progress-bar').style.width = '100%';
     document.getElementById('progress-bar').className = 'progress-bar bg-success';
     document.getElementById('progress-percent').textContent = '100%';
@@ -323,6 +329,8 @@ socket.on('done', (d) => {
     }, 500);
 });
 socket.on('error', (d) => {
+    clearInterval(watchdogTimer);
+    watchdogTimer = null;
     alert('生成失败: ' + d.error);
     document.getElementById('progress-card').classList.add('d-none');
     document.getElementById('btn-generate').disabled = false;
@@ -477,6 +485,8 @@ function updateVolume() {
 
 // ============ Generate ============
 let currentTask = null;
+let lastProgressTime = 0;
+let watchdogTimer = null;
 
 async function generate() {
     const text = document.getElementById('text-input').value.trim();
@@ -505,9 +515,28 @@ async function generate() {
     if (r.status === 401) { window.location.href = '/login'; return; }
     const d = await r.json();
     currentTask = d.task;
+
+    // Start watchdog: if no progress/heartbeat for 90s, show retry prompt
+    lastProgressTime = Date.now();
+    if (watchdogTimer) clearInterval(watchdogTimer);
+    watchdogTimer = setInterval(() => {
+        const elapsed = (Date.now() - lastProgressTime) / 1000;
+        if (elapsed > 90) {
+            clearInterval(watchdogTimer);
+            watchdogTimer = null;
+            if (confirm('生成似乎已卡住（90秒无响应）。\n点击确定自动重试，取消则停止任务。')) {
+                cancelTask().then(() => {
+                    setTimeout(() => generate(), 500);
+                });
+            } else {
+                cancelTask();
+            }
+        }
+    }, 10000);
 }
 
 async function cancelTask() {
+    if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
     if (currentTask) {
         await fetch('/api/cancel/' + currentTask, { method: 'POST' });
     }
