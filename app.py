@@ -30,6 +30,17 @@ try:
 except ImportError:
     HAS_PYDUB = False
 
+# 版本号: 从环境变量读取(支持Docker构建时注入), 否则尝试读git commit, 最后fallback
+APP_VERSION = os.environ.get("APP_VERSION", "")
+if not APP_VERSION:
+    try:
+        import subprocess as _sp
+        APP_VERSION = _sp.check_output(["git", "rev-parse", "--short", "HEAD"],
+                                       stderr=_sp.DEVNULL, cwd=os.path.dirname(__file__) or ".") \
+                          .decode().strip()
+    except Exception:
+        APP_VERSION = "unknown"
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "tts-web-secret-key-change-me")
 
@@ -484,7 +495,7 @@ def logout():
 @app.route("/")
 @login_required
 def index():
-    return render_template("index.html")
+    return render_template("index.html", app_version=APP_VERSION)
 
 
 @app.route("/api/voices")
