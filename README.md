@@ -140,6 +140,12 @@ ffmpeg -i video.mp4 -i chinese.mp3 -i english.mp3 \
 - **语音引擎**: 微软 Edge TTS（免费，无需 API Key）
 - **容器**: Docker + ffmpeg（AMD64 + ARM64 双架构）
 
+## ☕ 请作者喝杯咖啡
+
+如果这个项目对你有帮助，欢迎请作者喝杯咖啡 ☕️
+
+![打赏码](assets/donation.jpg)
+
 ## 📜 License
 
 MIT
