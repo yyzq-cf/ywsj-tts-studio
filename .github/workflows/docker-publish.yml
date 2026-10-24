@@ -2,12 +2,14 @@ name: Build and Push Multi-Arch Docker Image
 
 on:
   push:
-    branches: [master]
+    tags:
+      - 'v*'
     paths:
       - 'app.py'
       - 'db.py'
       - 'requirements.txt'
       - 'Dockerfile'
+      - 'docker-compose.yml'
       - 'templates/**'
       - 'static/**'
       - '.github/workflows/docker-publish.yml'
@@ -35,9 +37,16 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Get version
+      - name: Extract version
         id: version
-        run: echo "version=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          generate_release_notes: true
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -45,7 +54,9 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ywsj/tts-studio:latest
-          build-args: APP_VERSION=${{ steps.version.outputs.version }}
+          tags: |
+            ywsj/tts-studio:latest
+            ywsj/tts-studio:${{ steps.version.outputs.VERSION }}
+          build-args: APP_VERSION=${{ steps.version.outputs.VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
