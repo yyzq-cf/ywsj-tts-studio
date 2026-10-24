@@ -41,12 +41,31 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
+      - name: Generate release notes
+        id: notes
+        run: |
+          # 获取上一个tag到当前tag之间的commit messages
+          PREV_TAG=$(git tag --sort=-creatordate | grep -v "^${VERSION}$" | head -1 || true)
+          if [ -z "$PREV_TAG" ]; then
+            NOTES=$(git log --pretty=format:"- %s" HEAD)
+          else
+            NOTES=$(git log --pretty=format:"- %s" ${PREV_TAG}..HEAD)
+          fi
+          # 写入多行变量
+          echo "NOTES<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.VERSION }}
-          generate_release_notes: true
+          body: ${{ steps.notes.outputs.NOTES }}
+          draft: false
+          prerelease: false
 
       - name: Build and push
         uses: docker/build-push-action@v6
